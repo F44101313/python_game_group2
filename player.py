@@ -1,28 +1,57 @@
 import pygame
 import math
 from bullet import Bullet
-from config import GREEN, BULLET_BASE_SPEED, BULLET_BASE_DAMAGE, UPGRADE_COST, UPGRADE_SPEED_INC, UPGRADE_DAMAGE_INC
+from config import (
+    GREEN,
+    BULLET_BASE_SPEED, BULLET_BASE_DAMAGE,
+    UPGRADE_COST, UPGRADE_SPEED_INC, UPGRADE_DAMAGE_INC
+)
 
+# 塔底座圖片（固定，不旋轉）
 PLAYER_IMG = pygame.image.load("Image/tower/tower0.png")
 PLAYER_IMG = pygame.transform.scale(PLAYER_IMG, (40, 40))
 
 class Player(pygame.sprite.Sprite):
-    shared_money = 0
+    """
+    固定式炮塔
+    - 底座用圖片
+    - 炮管與瞄準線用幾何繪製
+    controls: (left_key, right_key)
+    angle：以「向上」為 90 度；限制在 [min_angle, max_angle]
+    """
+    shared_money = 0  # 全體共用的金錢
 
     def __init__(self, x, y, controls, initial_angle, min_angle, max_angle):
         super().__init__()
-        self.image = PLAYER_IMG.copy()
+        self.base_image = PLAYER_IMG.copy()
+        self.image = self.base_image.copy()
         self.rect = self.image.get_rect(center=(x, y))
+
+        # 操作按鍵
         self.controls = controls
+        # 角度初始值 & 限制範圍
         self.angle = initial_angle
         self.min_angle = min_angle
         self.max_angle = max_angle
+
+        # 射擊屬性
+        self.shoot_delay = 400  # 每發間隔 (毫秒)
         self.last_shot = pygame.time.get_ticks()
-        self.shoot_delay = 400
         self.bullet_speed = BULLET_BASE_SPEED
         self.bullet_damage = BULLET_BASE_DAMAGE
-        self.angle_step = 2  # 每次按鍵旋轉角度
 
+        # 旋轉速度（度/秒，用 dt 控制更穩定）
+        self.turn_speed_deg = 180  
+
+        # 視覺：炮管長度 & 顏色
+        self.barrel_len = 46
+        self.barrel_color = (80, 200, 120)
+
+        # 砲口火光的計時器 (毫秒)
+        self._flash_timer_ms = 0
+        self._flash_max_ms = 60  # 火光持續 60ms
+
+    # ---- 升級 ----
     def upgrade(self):
         if Player.shared_money >= UPGRADE_COST:
             Player.shared_money -= UPGRADE_COST
@@ -31,34 +60,71 @@ class Player(pygame.sprite.Sprite):
         else:
             print("金錢不足，無法升級")
 
-    def update(self, bullets, all_sprites):
+    # ---- 更新 ----
+    def update(self, bullets, all_sprites, dt, shift_held=False):
+        """
+        更新行為
+        - dt: 每幀秒數 (秒)
+        - shift_held: 是否按著 Shift → 角度微調
+        """
         keys = pygame.key.get_pressed()
 
-        # 角度調整
-        if keys[self.controls[0]]:
-            self.angle += self.angle_step
-            if self.angle > self.max_angle:
-                self.angle = self.max_angle
-        elif keys[self.controls[1]]:
-            self.angle -= self.angle_step
-            if self.angle < self.min_angle:
-                self.angle = self.min_angle
+        # 判斷旋轉角度
+        delta_deg = self.turn_speed_deg * dt
+        if shift_held:  # 微調模式：旋轉速度減半
+            delta_deg *= 0.5
 
-        # 計算射擊方向向量
-        rad = math.radians(self.angle)
-        dx = math.cos(rad)
-        dy = -math.sin(rad)  # y向下，負值為上
+        if keys[self.controls[0]]:
+            self.angle += delta_deg
+        if keys[self.controls[1]]:
+            self.angle -= delta_deg
+
+        # 限制在可旋轉範圍內
+        self.angle = max(self.min_angle, min(self.max_angle, self.angle))
 
         # 自動射擊
         now = pygame.time.get_ticks()
         if now - self.last_shot > self.shoot_delay:
             self.last_shot = now
-            bullet = Bullet(
-                self.rect.centerx,
-                self.rect.centery,
-                (dx, dy),
-                speed=self.bullet_speed,
-                damage=self.bullet_damage
-            )
+            pos, dirv = self.muzzle_pos()
+            bullet = Bullet(pos.x, pos.y, (dirv.x, dirv.y),
+                            speed=self.bullet_speed,
+                            damage=self.bullet_damage)
             bullets.add(bullet)
             all_sprites.add(bullet)
+            self._flash_timer_ms = self._flash_max_ms  # 顯示火光
+
+        # 更新火光倒數
+        if self._flash_timer_ms > 0:
+            self._flash_timer_ms = max(0, self._flash_timer_ms - int(dt * 1000))
+
+    # ---- 計算砲口座標與方向向量 ----
+    def muzzle_pos(self):
+        base = pygame.Vector2(self.rect.centerx, self.rect.centery)
+        rad = math.radians(self.angle)
+        dirv = pygame.Vector2(math.cos(rad), -math.sin(rad))
+        muzzle = base + dirv * self.barrel_len
+        return muzzle, dirv
+
+    # ---- 繪製炮管 / 瞄準線 / 火光 ----
+    def draw_overlay(self, surface):
+        base = pygame.Vector2(self.rect.centerx, self.rect.centery)
+        muzzle, dirv = self.muzzle_pos()
+        tail = base + dirv * 12
+
+        # 炮管
+        pygame.draw.line(surface, self.barrel_color, tail, muzzle, 6)
+
+        # 瞄準線
+        aim_layer = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        end = muzzle + dirv * 420
+        pygame.draw.line(aim_layer, (255, 255, 200, 120), muzzle, end, 1)
+        pygame.draw.circle(aim_layer, (255, 255, 200, 160), (int(end.x), int(end.y)), 3)
+        surface.blit(aim_layer, (0, 0))
+
+        # 火光
+        if self._flash_timer_ms > 0:
+            p1 = muzzle
+            p2 = muzzle + dirv.rotate(28) * 12
+            p3 = muzzle + dirv.rotate(-28) * 12
+            pygame.draw.polygon(surface, (255, 240, 120), (p1, p2, p3))

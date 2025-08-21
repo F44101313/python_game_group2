@@ -4,6 +4,7 @@ from player import Player
 from enemy import Enemy, Boss
 from bullet import Bullet
 from castle import Castle
+from power import Power
 from view import draw_menu, draw_end_screen, draw_game_screen
 
 # ENEMY_REWARD 對應 HP
@@ -24,6 +25,7 @@ class Game:
         self.players = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
+        self.powers = pygame.sprite.Group()
 
         # 玩家初始化
         player1 = Player(
@@ -75,7 +77,7 @@ class Game:
         if self.state != "playing":
             return
 
-        # 生成敵人（Boss 出現前）
+        # 生成敵人
         if not self.boss_spawned and random.random() < 0.02:
             enemy_type = random.choice([
                 {"hp": 10, "speed": 1, "type_index": 0},
@@ -94,6 +96,12 @@ class Game:
             self.all_sprites.add(self.boss)
             self.boss_spawned = True
 
+        # 隨機生成 power (0.3% 機率)
+        if random.random() < 0.003:
+            power = Power(self.castle.rect)
+            self.powers.add(power)
+            self.all_sprites.add(power)
+
         # 更新玩家
         for player in self.players:
             player.update(self.bullets, self.all_sprites)
@@ -105,7 +113,10 @@ class Game:
         # 更新子彈
         self.bullets.update()
 
-        # 子彈碰撞檢測
+        # 更新 power
+        self.powers.update()
+
+        # 子彈打中敵人
         for bullet in self.bullets:
             hit_list = pygame.sprite.spritecollide(bullet, self.enemies, False)
             for enemy in hit_list:
@@ -114,6 +125,13 @@ class Game:
                 if enemy.hp <= 0:
                     Player.shared_money += ENEMY_REWARD.get(getattr(enemy, "hp", 20), 10)
                     enemy.kill()
+
+        # 子彈打中道具
+        for bullet in self.bullets:
+            hit_powers = pygame.sprite.spritecollide(bullet, self.powers, True)
+            for power in hit_powers:
+                power.apply_effect(self.enemies)
+                bullet.kill()
 
         # 升級
         keys = pygame.key.get_pressed()

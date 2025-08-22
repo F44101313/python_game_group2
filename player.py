@@ -40,7 +40,7 @@ class Player(pygame.sprite.Sprite):
         self.bullet_speed = BULLET_BASE_SPEED
         self.bullet_damage = BULLET_BASE_DAMAGE
 
-        # 旋轉速度（度/秒，用 dt 控制更穩定）
+        # 旋轉速度（度/秒，用 dt 控制）
         self.turn_speed_deg = 180  
 
         # 視覺：炮管長度 & 顏色
@@ -61,18 +61,15 @@ class Player(pygame.sprite.Sprite):
             print("金錢不足，無法升級")
 
     # ---- 更新 ----
-    def update(self, bullets, all_sprites, dt, shift_held=False):
+    def update(self, bullets, all_sprites, dt):
         """
         更新行為
         - dt: 每幀秒數 (秒)
-        - shift_held: 是否按著 Shift → 角度微調
         """
         keys = pygame.key.get_pressed()
 
-        # 判斷旋轉角度
-        delta_deg = self.turn_speed_deg * dt
-        if shift_held:  # 微調模式：旋轉速度減半
-            delta_deg *= 0.5
+        # 固定微調速度（常駐）
+        delta_deg = self.turn_speed_deg * dt * 0.2
 
         if keys[self.controls[0]]:
             self.angle += delta_deg

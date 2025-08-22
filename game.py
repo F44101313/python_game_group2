@@ -5,10 +5,27 @@ from enemy import Enemy, Boss
 from bullet import Bullet
 from castle import Castle
 from view import draw_menu, draw_end_screen, draw_game_screen
-from power import Power  # ← 道具
+from power import Power
+
+# 每關可出現的敵人列表
+ENEMY_POOL = {
+    1: [1, 2, 3],
+    2: [2, 3, 4, 5],
+    3: [4, 5, 6]
+}
+
+# 對應敵人屬性
+ENEMY_STATS = {
+    1: {"hp":10,"speed":60,"type_index":0},
+    2: {"hp":20,"speed":80,"type_index":1},
+    3: {"hp":30,"speed":100,"type_index":2},
+    4: {"hp":15,"speed":70,"type_index":3},
+    5: {"hp":25,"speed":90,"type_index":4},
+    6: {"hp":35,"speed":110,"type_index":5}
+}
 
 # ENEMY_REWARD 對應 HP → 金錢
-ENEMY_REWARD = {10: 5, 20: 10, 30: 15}
+ENEMY_REWARD = {10:5, 20:10, 30:15, 15:7, 25:12, 35:18}
 
 class Game:
     def __init__(self):
@@ -19,8 +36,11 @@ class Game:
         self.running = True
         Player.shared_money = 0
         self.state = "menu"
+        self.level = 1  # 初始關卡
 
-    def new_game(self):
+    def new_game(self, restart_level=False):
+        if not restart_level:
+            self.level = 1
         self.all_sprites = pygame.sprite.Group()
         self.players = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
@@ -30,14 +50,14 @@ class Game:
         # 玩家初始化
         player1 = Player(
             WIDTH-100, HEIGHT-200,
-            controls=(pygame.K_LEFT, pygame.K_RIGHT),
+            controls=(pygame.K_DOWN, pygame.K_UP),
             initial_angle=180,
             min_angle=135,
             max_angle=225
         )
         player2 = Player(
             100, 300,
-            controls=(pygame.K_a, pygame.K_d),
+            controls=(pygame.K_w, pygame.K_s),
             initial_angle=0,
             min_angle=-45,
             max_angle=45
@@ -76,7 +96,15 @@ class Game:
                 if self.state == "menu" and event.key == pygame.K_SPACE:
                     self.new_game()
                 elif self.state in ["win", "lose"] and event.key == pygame.K_SPACE:
-                    self.new_game()
+                    if self.state == "win":
+                        # 進入下一關
+                        self.level += 1
+                        if self.level > 3:
+                            self.level = 1
+                        self.new_game(restart_level=True)
+                    else:
+                        # 失敗 → 重新開始該關
+                        self.new_game(restart_level=True)
 
     def update(self, dt):
         if self.state != "playing":
@@ -84,23 +112,21 @@ class Game:
 
         # ---- 生成敵人 ----
         if not self.boss_spawned and random.random() < 0.02:
-            enemy_type = random.choice([
-                {"hp": 10, "speed": 60, "type_index": 0},
-                {"hp": 20, "speed": 80, "type_index": 1},
-                {"hp": 30, "speed": 100, "type_index": 2}
-            ])
-            enemy = Enemy(
-                hp=enemy_type["hp"],
-                speed=enemy_type["speed"],
-                type_index=enemy_type["type_index"]
-            )
+            enemy_choice = random.choice(ENEMY_POOL[self.level])
+            stats = ENEMY_STATS[enemy_choice]
+            enemy = Enemy(hp=stats["hp"], speed=stats["speed"], type_index=stats["type_index"])
             self.enemies.add(enemy)
             self.all_sprites.add(enemy)
 
         # ---- 生成 Boss ----
         seconds = (pygame.time.get_ticks() - self.start_ticks) // 1000
         if seconds > 30 and not self.boss_spawned:
-            self.boss = Boss()
+            if self.level == 1:
+                self.boss = Boss(hp=100, speed=55)
+            elif self.level == 2:
+                self.boss = Boss(hp=120, speed=60)
+            else:
+                self.boss = Boss(hp=150, speed=50)
             self.enemies.add(self.boss)
             self.all_sprites.add(self.boss)
             self.boss_spawned = True
@@ -114,9 +140,9 @@ class Game:
 
         # ---- 玩家更新 ----
         keys = pygame.key.get_pressed()
-        shift_held = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]  # ← Shift 微調
+        #shift_held = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
         for player in self.players:
-            player.update(self.bullets, self.all_sprites, dt, shift_held)
+            player.update(self.bullets, self.all_sprites, dt)
 
         # ---- 敵人更新 ----
         for enemy in self.enemies:
@@ -144,7 +170,7 @@ class Game:
                 for pu in hits:
                     pu.apply_effect(self.enemies)
 
-        # 升級 (玩家各自按鍵)
+        # 升級
         if keys[pygame.K_m]:
             self.players.sprites()[0].upgrade()
         if keys[pygame.K_e]:
@@ -166,7 +192,8 @@ class Game:
                 self.enemies,
                 self.castle,
                 self.boss,
-                Player.shared_money
+                Player.shared_money,
+                level=self.level
             )
             # 道具畫在最上層
             self.powerups.draw(self.screen)

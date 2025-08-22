@@ -27,6 +27,9 @@ ENEMY_IMGS = [
     pygame.image.load("Image/enemy/enemy000.png"),
     pygame.image.load("Image/enemy/enemy0.png"),
     pygame.image.load("Image/enemy/enemy00.png"),
+    pygame.image.load("Image/enemy/enemy000.png"),
+    pygame.image.load("Image/enemy/enemy0.png"),
+    pygame.image.load("Image/enemy/enemy00.png"),
     pygame.image.load("Image/enemy/enemy000.png")
 ]
 ENEMY_IMGS = [pygame.transform.scale(img, (40, 40)) for img in ENEMY_IMGS]

@@ -10,8 +10,8 @@ from power import Power
 # 每關可出現的敵人列表
 ENEMY_POOL = {
     1: [1, 2, 3],
-    2: [2, 3, 4, 5],
-    3: [4, 5, 6]
+    2: [4, 5, 6],
+    3: [7, 8, 9]
 }
 
 # 對應敵人屬性
@@ -21,7 +21,10 @@ ENEMY_STATS = {
     3: {"hp":30,"speed":100,"type_index":2},
     4: {"hp":15,"speed":70,"type_index":3},
     5: {"hp":25,"speed":90,"type_index":4},
-    6: {"hp":35,"speed":110,"type_index":5}
+    6: {"hp":35,"speed":110,"type_index":5},
+    7: {"hp":15,"speed":70,"type_index":6},
+    8: {"hp":25,"speed":90,"type_index":7},
+    9: {"hp":35,"speed":110,"type_index":8}
 }
 
 # ENEMY_REWARD 對應 HP → 金錢

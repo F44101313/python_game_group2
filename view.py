@@ -14,23 +14,23 @@ CASTLE_POS = (WIDTH // 2 - CASTLE_IMG.get_width() // 2, 0)
 
 # Boss 圖片（3關各自不同，可暫時先用同圖）
 BOSS_IMGS = [
-    pygame.image.load("Image/boss/boss0.png"),
-    pygame.image.load("Image/boss/boss0.png"),
-    pygame.image.load("Image/boss/boss0.png")
+    pygame.image.load("Image/boss/boss1.png"),
+    pygame.image.load("Image/boss/boss2.png"),
+    pygame.image.load("Image/boss/boss3.png")
 ]
 BOSS_IMGS = [pygame.transform.scale(img, (200, 200)) for img in BOSS_IMGS]
 
 # 敵人圖片（目前 6 種，先全部用同圖，可再替換）
 ENEMY_IMGS = [
-    pygame.image.load("Image/enemy/enemy0.png"),
-    pygame.image.load("Image/enemy/enemy00.png"),
-    pygame.image.load("Image/enemy/enemy000.png"),
-    pygame.image.load("Image/enemy/enemy0.png"),
-    pygame.image.load("Image/enemy/enemy00.png"),
-    pygame.image.load("Image/enemy/enemy000.png"),
-    pygame.image.load("Image/enemy/enemy0.png"),
-    pygame.image.load("Image/enemy/enemy00.png"),
-    pygame.image.load("Image/enemy/enemy000.png")
+    pygame.image.load("Image/enemy/enemy1-1.png"),
+    pygame.image.load("Image/enemy/enemy1-2.png"),
+    pygame.image.load("Image/enemy/enemy1-3.png"),
+    pygame.image.load("Image/enemy/enemy2-1.png"),
+    pygame.image.load("Image/enemy/enemy2-2.png"),
+    pygame.image.load("Image/enemy/enemy2-3.png"),
+    pygame.image.load("Image/enemy/enemy3-1.png"),
+    pygame.image.load("Image/enemy/enemy3-2.png"),
+    pygame.image.load("Image/enemy/enemy3-3.png")
 ]
 ENEMY_IMGS = [pygame.transform.scale(img, (40, 40)) for img in ENEMY_IMGS]
 

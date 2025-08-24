@@ -7,7 +7,6 @@ from config import (
     UPGRADE_COST, UPGRADE_SPEED_INC, UPGRADE_DAMAGE_INC
 )
 
-# 塔底座圖片（固定，不旋轉）
 PLAYER_IMG = pygame.image.load("Image/tower/tower0.png")
 PLAYER_IMG = pygame.transform.scale(PLAYER_IMG, (40, 40))
 
@@ -17,7 +16,7 @@ class Player(pygame.sprite.Sprite):
     controls: (left_key, right_key)
     angle：以「向上」為 90 度；限制在 [min_angle, max_angle]
     """
-    shared_money = 0  # 全體共用的金錢
+    shared_money = 0  # 全體共用金錢
 
     def __init__(self, x, y, controls, initial_angle, min_angle, max_angle):
         super().__init__()
@@ -27,34 +26,35 @@ class Player(pygame.sprite.Sprite):
 
         # 操作按鍵
         self.controls = controls
-        # 角度初始值 & 限制範圍
         self.angle = initial_angle
         self.min_angle = min_angle
         self.max_angle = max_angle
 
         # 射擊屬性
-        self.shoot_delay = 400  # 每發間隔 (毫秒)
+        self.shoot_delay = 400
         self.last_shot = pygame.time.get_ticks()
         self.bullet_speed = BULLET_BASE_SPEED
         self.bullet_damage = BULLET_BASE_DAMAGE
 
-        # 旋轉速度（度/秒，用 dt 控制）
-        self.turn_speed_deg = 180  
-
-        # 視覺：炮管長度 & 顏色
+        self.turn_speed_deg = 180
         self.barrel_len = 46
         self.barrel_color = (80, 200, 120)
 
-        # 火光計時器 (毫秒)
         self._flash_timer_ms = 0
         self._flash_max_ms = 60
 
-        # 玩家等級
         self.level = 1
         self.max_level = 5
 
-    # ---- 升級 ----
+        # 升級冷卻
+        self._last_upgrade = 0
+        self.upgrade_cooldown_ms = 1000  # 1 秒
+
     def upgrade(self):
+        now = pygame.time.get_ticks()
+        if now - self._last_upgrade < self.upgrade_cooldown_ms:
+            return  # 冷卻中，不升級
+
         if self.level >= self.max_level:
             print("已達最高等級")
             return
@@ -64,10 +64,10 @@ class Player(pygame.sprite.Sprite):
             self.bullet_speed += UPGRADE_SPEED_INC
             self.bullet_damage += UPGRADE_DAMAGE_INC
             self.level += 1
+            self._last_upgrade = now
         else:
             print("金錢不足，無法升級")
 
-    # ---- 更新 ----
     def update(self, bullets, all_sprites, dt):
         keys = pygame.key.get_pressed()
 
@@ -91,11 +91,9 @@ class Player(pygame.sprite.Sprite):
             all_sprites.add(bullet)
             self._flash_timer_ms = self._flash_max_ms
 
-        # 火光倒數
         if self._flash_timer_ms > 0:
             self._flash_timer_ms = max(0, self._flash_timer_ms - int(dt * 1000))
 
-    # ---- 砲口座標與方向向量 ----
     def muzzle_pos(self):
         base = pygame.Vector2(self.rect.centerx, self.rect.centery)
         rad = math.radians(self.angle)
@@ -103,7 +101,6 @@ class Player(pygame.sprite.Sprite):
         muzzle = base + dirv * self.barrel_len
         return muzzle, dirv
 
-    # ---- 繪製炮管 / 瞄準線 / 火光 ----
     def draw_overlay(self, surface):
         base = pygame.Vector2(self.rect.centerx, self.rect.centery)
         muzzle, dirv = self.muzzle_pos()

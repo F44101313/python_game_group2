@@ -20,7 +20,7 @@ BOSS_IMGS = [
 ]
 BOSS_IMGS = [pygame.transform.scale(img, (200, 200)) for img in BOSS_IMGS]
 
-# 敵人圖片（目前 6 種，先全部用同圖，可再替換）
+# 敵人圖片（9 種）
 ENEMY_IMGS = [
     pygame.image.load("Image/enemy/enemy1-1.png"),
     pygame.image.load("Image/enemy/enemy1-2.png"),
@@ -67,7 +67,7 @@ def draw_end_screen(screen, win=True):
     screen.blit(prompt, (WIDTH//2 - prompt.get_width()//2, HEIGHT//2 + 10))
 
 # --- 遊戲主畫面 ---
-def draw_game_screen(screen, all_sprites, enemies, castle, boss, money, show_path=True, level=1):
+def draw_game_screen(screen, all_sprites, enemies, castle, boss, money, show_path=True, level=1, enemy_bullets=None):
     screen.blit(BACKGROUND_IMG, (0,0))
     if show_path:
         draw_path_polyline(screen)
@@ -98,6 +98,15 @@ def draw_game_screen(screen, all_sprites, enemies, castle, boss, money, show_pat
     for spr in all_sprites:
         if hasattr(spr, "draw_overlay"):
             spr.draw_overlay(screen)
+
+    # 敵人子彈
+    if enemy_bullets:
+        for b in enemy_bullets:
+            # 方塊 + 尾巴
+            pygame.draw.rect(screen, (255, 180, 50), b.rect)
+            pygame.draw.line(screen, (255, 200, 100),
+                             (b.rect.centerx, b.rect.centery),
+                             (b.rect.centerx - b.speedx*2, b.rect.centery - b.speedy*2), 2)
 
     # 金錢
     money_text = font.render(f"Money: {money}", True, WHITE)

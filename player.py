@@ -14,8 +14,6 @@ PLAYER_IMG = pygame.transform.scale(PLAYER_IMG, (40, 40))
 class Player(pygame.sprite.Sprite):
     """
     固定式炮塔
-    - 底座用圖片
-    - 炮管與瞄準線用幾何繪製
     controls: (left_key, right_key)
     angle：以「向上」為 90 度；限制在 [min_angle, max_angle]
     """
@@ -47,36 +45,38 @@ class Player(pygame.sprite.Sprite):
         self.barrel_len = 46
         self.barrel_color = (80, 200, 120)
 
-        # 砲口火光的計時器 (毫秒)
+        # 火光計時器 (毫秒)
         self._flash_timer_ms = 0
-        self._flash_max_ms = 60  # 火光持續 60ms
+        self._flash_max_ms = 60
+
+        # 玩家等級
+        self.level = 1
+        self.max_level = 5
 
     # ---- 升級 ----
     def upgrade(self):
+        if self.level >= self.max_level:
+            print("已達最高等級")
+            return
+
         if Player.shared_money >= UPGRADE_COST:
             Player.shared_money -= UPGRADE_COST
             self.bullet_speed += UPGRADE_SPEED_INC
             self.bullet_damage += UPGRADE_DAMAGE_INC
+            self.level += 1
         else:
             print("金錢不足，無法升級")
 
     # ---- 更新 ----
     def update(self, bullets, all_sprites, dt):
-        """
-        更新行為
-        - dt: 每幀秒數 (秒)
-        """
         keys = pygame.key.get_pressed()
 
-        # 固定微調速度（常駐）
         delta_deg = self.turn_speed_deg * dt * 0.2
-
         if keys[self.controls[0]]:
             self.angle += delta_deg
         if keys[self.controls[1]]:
             self.angle -= delta_deg
 
-        # 限制在可旋轉範圍內
         self.angle = max(self.min_angle, min(self.max_angle, self.angle))
 
         # 自動射擊
@@ -89,13 +89,13 @@ class Player(pygame.sprite.Sprite):
                             damage=self.bullet_damage)
             bullets.add(bullet)
             all_sprites.add(bullet)
-            self._flash_timer_ms = self._flash_max_ms  # 顯示火光
+            self._flash_timer_ms = self._flash_max_ms
 
-        # 更新火光倒數
+        # 火光倒數
         if self._flash_timer_ms > 0:
             self._flash_timer_ms = max(0, self._flash_timer_ms - int(dt * 1000))
 
-    # ---- 計算砲口座標與方向向量 ----
+    # ---- 砲口座標與方向向量 ----
     def muzzle_pos(self):
         base = pygame.Vector2(self.rect.centerx, self.rect.centery)
         rad = math.radians(self.angle)

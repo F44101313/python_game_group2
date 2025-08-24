@@ -40,6 +40,7 @@ class Game:
         Player.shared_money = 0
         self.state = "menu"
         self.level = 1  # 初始關卡
+        self.enemy_bullets = pygame.sprite.Group()
 
     def new_game(self, restart_level=False):
         if not restart_level:
@@ -49,6 +50,7 @@ class Game:
         self.bullets = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
         self.powerups = pygame.sprite.Group()
+        self.enemy_bullets = pygame.sprite.Group()
 
         # 玩家初始化
         player1 = Player(
@@ -100,18 +102,18 @@ class Game:
                     self.new_game()
                 elif self.state in ["win", "lose"] and event.key == pygame.K_SPACE:
                     if self.state == "win":
-                        # 進入下一關
                         self.level += 1
                         if self.level > 3:
                             self.level = 1
                         self.new_game(restart_level=True)
                     else:
-                        # 失敗 → 重新開始該關
                         self.new_game(restart_level=True)
 
     def update(self, dt):
         if self.state != "playing":
             return
+
+        now = pygame.time.get_ticks()
 
         # ---- 生成敵人 ----
         if not self.boss_spawned and random.random() < 0.02:
@@ -122,7 +124,7 @@ class Game:
             self.all_sprites.add(enemy)
 
         # ---- 生成 Boss ----
-        seconds = (pygame.time.get_ticks() - self.start_ticks) // 1000
+        seconds = (now - self.start_ticks) // 1000
         if seconds > 30 and not self.boss_spawned:
             if self.level == 1:
                 self.boss = Boss(hp=100, speed=55)
@@ -134,16 +136,13 @@ class Game:
             self.all_sprites.add(self.boss)
             self.boss_spawned = True
 
-        # ---- 生成 / 更新道具 ----
-        now = pygame.time.get_ticks()
+        # ---- 道具 ----
         if now >= self._next_power_at and not self.castle.is_destroyed():
             self.powerups.add(Power())
             self._next_power_at = now + self.power_cd_ms + random.randint(-1200, 1200)
         self.powerups.update()
 
         # ---- 玩家更新 ----
-        keys = pygame.key.get_pressed()
-        #shift_held = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
         for player in self.players:
             player.update(self.bullets, self.all_sprites, dt)
 
@@ -151,10 +150,27 @@ class Game:
         for enemy in self.enemies:
             enemy.update(self.castle, dt)
 
-        # ---- 子彈更新 ----
-        self.bullets.update()
+            # 小兵 3、6、9 對城堡射擊
+            if getattr(enemy, "type_index", -1) in [2, 5, 8]:
+                if not hasattr(enemy, "_last_shot_time"):
+                    enemy._last_shot_time = 0
+                if now - enemy._last_shot_time >= 1000:  # 射擊間隔 1 秒
+                    enemy._last_shot_time = now
+                    muzzle = pygame.Vector2(enemy.rect.center)
+                    castle_center = pygame.Vector2(self.castle.rect.center)
+                    dirv = castle_center - muzzle
+                    if dirv.length() != 0:
+                        dirv = dirv.normalize()
+                    bullet = Bullet(muzzle.x, muzzle.y, (dirv.x, dirv.y),
+                                    speed=4, damage=2)
+                    self.enemy_bullets.add(bullet)
+                    self.all_sprites.add(bullet)
 
-        # 子彈打到敵人
+        # ---- 更新子彈 ----
+        self.bullets.update()
+        self.enemy_bullets.update()
+
+        # 玩家子彈打到敵人
         for bullet in list(self.bullets):
             hit_list = pygame.sprite.spritecollide(bullet, self.enemies, False)
             if hit_list:
@@ -165,7 +181,13 @@ class Game:
                         Player.shared_money += ENEMY_REWARD.get(getattr(enemy, "max_hp", 20), 10)
                         enemy.kill()
 
-        # 子彈打到道具 → 全體敵人生效
+        # 小怪子彈打到城堡 → 扣血
+        for bullet in list(self.enemy_bullets):
+            if bullet.rect.colliderect(self.castle.rect):
+                self.castle.take_damage(bullet.damage)
+                bullet.kill()
+
+        # 玩家子彈打到道具 → 全體敵人生效
         for bullet in list(self.bullets):
             hits = pygame.sprite.spritecollide(bullet, self.powerups, dokill=True)
             if hits:
@@ -173,13 +195,14 @@ class Game:
                 for pu in hits:
                     pu.apply_effect(self.enemies)
 
-        # 升級
+        # ---- 升級 ----
+        keys = pygame.key.get_pressed()
         if keys[pygame.K_m]:
             self.players.sprites()[0].upgrade()
         if keys[pygame.K_e]:
             self.players.sprites()[1].upgrade()
 
-        # 勝負判斷
+        # ---- 勝負判斷 ----
         if self.castle.is_destroyed():
             self.state = "lose"
         elif self.boss_spawned and self.boss not in self.enemies:
@@ -198,8 +221,14 @@ class Game:
                 Player.shared_money,
                 level=self.level
             )
-            # 道具畫在最上層
             self.powerups.draw(self.screen)
+            
+             # 顯示玩家等級
+            p1, p2 = self.players.sprites()
+            lv1_text = font.render(f"Player 1 lv.{p1.level}", True, WHITE)
+            lv2_text = font.render(f"Player 2 lv.{p2.level}", True, WHITE)
+            self.screen.blit(lv1_text, (10, 35))
+            self.screen.blit(lv2_text, (10, 60))    
         elif self.state in ["win", "lose"]:
             draw_end_screen(self.screen, win=(self.state == "win"))
         pygame.display.flip()

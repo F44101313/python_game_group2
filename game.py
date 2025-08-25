@@ -9,15 +9,15 @@ from power import Power
 
 ENEMY_POOL = {1:[1,2,3], 2:[4,5,6], 3:[7,8,9]}
 ENEMY_STATS = {
-    1: {"hp":10,"speed":60,"type_index":0},
-    2: {"hp":20,"speed":80,"type_index":1},
-    3: {"hp":30,"speed":100,"type_index":2},
-    4: {"hp":15,"speed":70,"type_index":3},
-    5: {"hp":25,"speed":90,"type_index":4},
+    1: {"hp":10,"speed":100,"type_index":0},
+    2: {"hp":30,"speed":80,"type_index":1},
+    3: {"hp":20,"speed":90,"type_index":2},
+    4: {"hp":20,"speed":120,"type_index":3},
+    5: {"hp":45,"speed":90,"type_index":4},
     6: {"hp":35,"speed":110,"type_index":5},
-    7: {"hp":15,"speed":70,"type_index":6},
-    8: {"hp":25,"speed":90,"type_index":7},
-    9: {"hp":35,"speed":110,"type_index":8}
+    7: {"hp":25,"speed":130,"type_index":6},
+    8: {"hp":55,"speed":90,"type_index":7},
+    9: {"hp":45,"speed":120,"type_index":8}
 }
 ENEMY_REWARD = {10:5, 20:10, 30:15, 15:7, 25:12, 35:18}
 

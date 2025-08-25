@@ -41,6 +41,13 @@ class Game:
         self.end_time = None
         self.next_state = None
 
+        # BGM 音量（0.0~1.0）
+        self.bgm_volume = 0.015  # 調整背景音樂音量
+        # 音效音量
+        self.sfx_volume = 0.01   # 調整爆炸音效音量
+
+        self.sfx_power_volume = 0.02
+
         # 背景音樂
         self.bgm_menu = "sound/bgm/menu.ogg"
         self.bgm_level = {1:"sound/bgm/level1.ogg", 2:"sound/bgm/level2.ogg", 3:"sound/bgm/level3.ogg"}
@@ -52,10 +59,16 @@ class Game:
         # 音效
         self.sfx_explode_small = pygame.mixer.Sound("sound/sound_effect/explode1.ogg")
         self.sfx_explode_big   = pygame.mixer.Sound("sound/sound_effect/explode2.mp3")
+        self.sfx_power = pygame.mixer.Sound("sound/sound_effect/power.ogg")
+        self.sfx_explode_small.set_volume(self.sfx_volume)
+        self.sfx_explode_big.set_volume(self.sfx_volume)
+        self.sfx_power.set_volume(self.sfx_power_volume)
+
 
     def play_bgm(self, path, loop=-1):
         if self.current_bgm != path:
             pygame.mixer.music.load(path)
+            pygame.mixer.music.set_volume(self.bgm_volume)
             pygame.mixer.music.play(loop)
             self.current_bgm = path
 
@@ -248,6 +261,7 @@ class Game:
         for bullet in list(self.bullets):
             hits = pygame.sprite.spritecollide(bullet, self.powerups, dokill=True)
             if hits:
+                self.sfx_power.play()
                 bullet.kill()
                 for pu in hits:
                     pu.apply_effect(self.enemies)

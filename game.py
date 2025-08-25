@@ -7,6 +7,7 @@ from castle import Castle
 from view import draw_menu, draw_end_screen, draw_game_screen, draw_story, draw_tutorial
 from power import Power
 
+# 敵人池與屬性
 ENEMY_POOL = {1:[1,2,3], 2:[4,5,6], 3:[7,8,9]}
 ENEMY_STATS = {
     1: {"hp":10,"speed":100,"type_index":0},
@@ -32,7 +33,6 @@ class Game:
         self.state = "menu"
         self.level = 1
         self.enemy_bullets = pygame.sprite.Group()
-        # 玩家升級冷卻
         self._upgrade_cd_ms = 1000
         self._next_upgrade_p1 = 0
         self._next_upgrade_p2 = 0
@@ -40,6 +40,7 @@ class Game:
     def new_game(self, restart_level=False):
         if not restart_level:
             self.level = 1
+
         self.all_sprites = pygame.sprite.Group()
         self.players = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
@@ -47,12 +48,16 @@ class Game:
         self.powerups = pygame.sprite.Group()
         self.enemy_bullets = pygame.sprite.Group()
 
+        # 玩家設定
         player1 = Player(WIDTH-100, HEIGHT-200, (pygame.K_DOWN, pygame.K_UP), 180, 135, 225)
         player2 = Player(100, 300, (pygame.K_w, pygame.K_s), 0, -45, 45)
         self.players.add(player1, player2)
         self.all_sprites.add(player1, player2)
 
-        self.castle = Castle()
+        # 城堡，每關獨立血量與圖片
+        castle_hp_map = {1: 500, 2: 700, 3: 1000}
+        self.castle = Castle(level=self.level, hp=castle_hp_map.get(self.level, 500))
+
         self.boss_spawned = False
         self.boss = None
         self.start_ticks = pygame.time.get_ticks()
@@ -77,16 +82,18 @@ class Game:
                 if self.state in ["win", "lose"]:
                     if event.key == pygame.K_SPACE:
                         if self.state == "win":
-                            self.level += 1
-                            if self.level > 3:
-                                self.level = 1
-                            self.new_game(restart_level=True)
+                            # 關卡進階
+                            if self.level < 3:
+                                self.level += 1
+                                self.new_game(restart_level=True)
+                            else:
+                                self.state = "menu"  # 第三關後回到MENU
                         else:
                             self.new_game(restart_level=True)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 if self.state == "menu":
-                    buttons = draw_menu(self.screen)  # 取得按鈕矩形
+                    buttons = draw_menu(self.screen)
                     if buttons["start"].collidepoint(mx, my):
                         self.state = "story"
                     elif buttons["howto"].collidepoint(mx, my):
@@ -94,7 +101,7 @@ class Game:
                 elif self.state == "story":
                     buttons = draw_story(self.screen)
                     if buttons["go"].collidepoint(mx, my):
-                        self.new_game()  # 開始第一關
+                        self.new_game()
                 elif self.state == "tutoriel":
                     buttons = draw_tutorial(self.screen)
                     if buttons["ok"].collidepoint(mx, my):
@@ -105,7 +112,8 @@ class Game:
             return
 
         now = pygame.time.get_ticks()
-        # 生成敵人 (降低出場率)
+
+        # 生成敵人
         if not self.boss_spawned and random.random() < 0.01:
             enemy_choice = random.choice(ENEMY_POOL[self.level])
             stats = ENEMY_STATS[enemy_choice]
@@ -192,7 +200,10 @@ class Game:
         if self.castle.is_destroyed():
             self.state = "lose"
         elif self.boss_spawned and self.boss not in self.enemies:
-            self.state = "win"
+            if self.level < 3:
+                self.state = "win"
+            else:
+                self.state = "win"  # 第三關勝利後將在 draw 中顯示 THE WORLD IS SAVED
 
     def draw(self):
         if self.state == "menu":
@@ -213,13 +224,15 @@ class Game:
                 enemy_bullets=self.enemy_bullets,
             )
             self.powerups.draw(self.screen)
-            # 顯示玩家等級
             p1, p2 = self.players.sprites()
             lv1_text = font.render(f"Player 1 lv.{p1.level}", True, WHITE)
             lv2_text = font.render(f"Player 2 lv.{p2.level}", True, WHITE)
             self.screen.blit(lv1_text, (10, 35))
             self.screen.blit(lv2_text, (10, 60))
         elif self.state in ["win", "lose"]:
-            draw_end_screen(self.screen, win=(self.state == "win"))
-
+            # 第三關勝利顯示特殊訊息
+            if self.state=="win" and self.level==3:
+                draw_end_screen(self.screen, win=True, level=3, final_level=3)
+            else:
+                draw_end_screen(self.screen, win=(self.state=="win"), level=self.level)
         pygame.display.flip()

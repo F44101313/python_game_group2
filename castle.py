@@ -1,39 +1,51 @@
 import pygame
-from config import RED, GREEN, CASTLE_HP, WIDTH
+from config import WHITE, WIDTH
 
-class Castle:
-    def __init__(self):
-        self.hp = CASTLE_HP
-        self.max_hp = CASTLE_HP
-        # 和 view.py 裡的 CASTLE_IMG(200x200) 對齊
-        self.rect = pygame.Rect(WIDTH // 2 - 100, 0, 200, 200)
+# 每關城堡圖片，請確保 Image/castle/ 下有 castle0.png, castle1.png, castle2.png
+CASTLE_IMGS = [
+    pygame.image.load("Image/castle/castle1.png"),
+    pygame.image.load("Image/castle/castle2.png"),
+    pygame.image.load("Image/castle/castle3.png")
+]
+CASTLE_IMGS = [pygame.transform.scale(img, (200, 200)) for img in CASTLE_IMGS]
+
+class Castle(pygame.sprite.Sprite):
+    def __init__(self, level=1, hp=100):
+        super().__init__()
+        # 關卡對應圖片，level 從 1 開始
+        self.image = CASTLE_IMGS[level-1].copy()
+        self.rect = self.image.get_rect()
+        self.max_hp = hp
+        self.hp = hp
+
+        # 預設位置置中頂端
+        self.rect.topleft = (WIDTH // 2 - self.rect.width // 2, 0)
 
     def take_damage(self, dmg):
-        # 扣血並夾到 0 以上
+        """扣血並夾到 0 以上"""
         self.hp = max(0, self.hp - int(dmg))
 
+    def is_destroyed(self):
+        """判斷城堡是否被摧毀"""
+        return self.hp <= 0
+
     def draw(self, surface, font):
-        """
-        在城堡『右側』畫直式血條（從下往上變短），再畫文字。
-        view.py 會在每幀把 self.rect.topleft 對齊 CASTLE_POS。
-        """
-        bar_w = 10
-        bar_h = self.rect.height
+        """畫城堡血條與數值"""
+        # 血條尺寸與位置
+        bar_width = 160
+        bar_height = 15
+        x = self.rect.centerx - bar_width // 2
+        y = self.rect.top + 20
+        fill = int(bar_width * self.hp / self.max_hp)
 
-        x = self.rect.right + 6         # 右邊留 6px 間距
-        y = self.rect.top
+        # 背景紅條
+        pygame.draw.rect(surface, (255,0,0), (x, y, bar_width, bar_height))
+        # 綠色血量條
+        pygame.draw.rect(surface, (0,255,0), (x, y, fill, bar_height))
 
-        # 紅色背景條（滿血大小）
-        pygame.draw.rect(surface, RED, (x, y, bar_w, bar_h))
-
-        # 綠色目前血量（從下往上填）
-        ratio = 0.0 if self.max_hp == 0 else max(0.0, min(1.0, self.hp / self.max_hp))
-        fill_h = int(bar_h * ratio)
-        pygame.draw.rect(surface, GREEN, (x, y + (bar_h - fill_h), bar_w, fill_h))
-
-        # 文字（放在血條右邊）
-        text = font.render(f"{self.hp}/{self.max_hp}", True, (255, 255, 255))
-        surface.blit(text, (x + bar_w + 8, self.rect.centery - text.get_height() // 2))
+        # 顯示 HP 數字
+        hp_text = font.render(f"{self.hp}/{self.max_hp}", True, WHITE)
+        surface.blit(hp_text, (self.rect.centerx - hp_text.get_width()//2, y - 20))
 
     def is_destroyed(self):
         return self.hp <= 0

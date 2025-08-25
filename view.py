@@ -197,7 +197,3 @@ def draw_game_screen(screen, all_sprites, enemies, castle, boss, money, show_pat
     # 關卡
     level_text = font.render(f"Level {level}", True, WHITE)
     screen.blit(level_text, (10, HEIGHT-30))
-
-    # 關卡顯示
-    level_text = font.render(f"Level {level}", True, WHITE)
-    screen.blit(level_text, (10, HEIGHT-30))

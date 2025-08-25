@@ -3,9 +3,9 @@ from config import WHITE, WIDTH
 
 # 每關城堡圖片，請確保 Image/castle/ 下有 castle0.png, castle1.png, castle2.png
 CASTLE_IMGS = [
-    pygame.image.load("Image/castle/castle1.png"),
-    pygame.image.load("Image/castle/castle2.png"),
-    pygame.image.load("Image/castle/castle3.png")
+    pygame.image.load("Image/castle/熱蘭遮城(荷蘭).png"),
+    pygame.image.load("Image/castle/台南孔廟(明鄭).png"),
+    pygame.image.load("Image/castle/台南州廳(日治).png"),
 ]
 CASTLE_IMGS = [pygame.transform.scale(img, (200, 200)) for img in CASTLE_IMGS]
 

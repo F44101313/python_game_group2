@@ -6,6 +6,7 @@ from bullet import Bullet
 from castle import Castle
 from view import draw_menu, draw_end_screen, draw_game_screen, draw_story, draw_tutorial
 from power import Power
+from explosion import Explosion
 
 # 敵人池與屬性
 ENEMY_POOL = {1:[1,2,3], 2:[4,5,6], 3:[7,8,9]}
@@ -20,22 +21,25 @@ ENEMY_STATS = {
     8: {"hp":100,"speed":100,"type_index":7},
     9: {"hp":80,"speed":125,"type_index":8}
 }
-ENEMY_REWARD = {10:5, 20:10, 30:15, 15:7, 25:12, 35:18}
 
 class Game:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("雙人合作射擊遊戲")
+        pygame.display.set_caption("《時空城防：台南異象》")
         self.clock = pygame.time.Clock()
         self.running = True
         Player.shared_money = 0
         self.state = "menu"
         self.level = 1
         self.enemy_bullets = pygame.sprite.Group()
+        self.explosions = pygame.sprite.Group()
         self._upgrade_cd_ms = 1000
         self._next_upgrade_p1 = 0
         self._next_upgrade_p2 = 0
+        # 延遲結束控制
+        self.end_time = None
+        self.next_state = None
 
     def new_game(self, restart_level=False):
         if not restart_level:
@@ -47,23 +51,28 @@ class Game:
         self.enemies = pygame.sprite.Group()
         self.powerups = pygame.sprite.Group()
         self.enemy_bullets = pygame.sprite.Group()
+        self.explosions = pygame.sprite.Group()
 
         # 玩家設定
         player1 = Player(WIDTH-100, HEIGHT-200, (pygame.K_DOWN, pygame.K_UP), 180, 135, 225)
         player2 = Player(100, 300, (pygame.K_w, pygame.K_s), 0, -45, 45)
         self.players.add(player1, player2)
         self.all_sprites.add(player1, player2)
+        Player.shared_money = 0  # 每關開始重置金錢
 
-        # 城堡，每關獨立血量與圖片
-        castle_hp_map = {1: 500, 2: 700, 3: 1000}
+        # 城堡
+        castle_hp_map = {1: 700, 2: 1000, 3: 1000}
         self.castle = Castle(level=self.level, hp=castle_hp_map.get(self.level, 500))
 
+        # Boss
         self.boss_spawned = False
         self.boss = None
         self.start_ticks = pygame.time.get_ticks()
         self.power_cd_ms = 6000
         self._next_power_at = pygame.time.get_ticks() + 2500
         self.state = "playing"
+        self.end_time = None
+        self.next_state = None
 
     def run(self):
         while self.running:
@@ -82,12 +91,11 @@ class Game:
                 if self.state in ["win", "lose"]:
                     if event.key == pygame.K_SPACE:
                         if self.state == "win":
-                            # 關卡進階
                             if self.level < 3:
                                 self.level += 1
                                 self.new_game(restart_level=True)
                             else:
-                                self.state = "menu"  # 第三關後回到MENU
+                                self.state = "menu"
                         else:
                             self.new_game(restart_level=True)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -110,8 +118,24 @@ class Game:
     def update(self, dt):
         if self.state != "playing":
             return
-
         now = pygame.time.get_ticks()
+
+        # --- Castle 死亡處理 ---
+        if self.castle.is_destroyed() and self.end_time is None:
+            self.explosions.add(Explosion(self.castle.rect.center, size=120, duration=1000))
+            self.end_time = now
+            self.next_state = "lose"
+
+        # --- Boss 死亡處理 ---
+        if self.boss_spawned and self.boss not in self.enemies and self.end_time is None:
+            self.explosions.add(Explosion(self.boss.rect.center, size=150, duration=1000))
+            self.end_time = now
+            self.next_state = "win"
+
+        # --- 延遲 3.5 秒後才切換 ---
+        if self.end_time and now - self.end_time >= 2000:
+            self.state = self.next_state
+            return  # 不再更新遊戲
 
         # 生成敵人
         if not self.boss_spawned and random.random() < 0.01:
@@ -131,7 +155,7 @@ class Game:
             self.all_sprites.add(self.boss)
             self.boss_spawned = True
 
-        # 道具
+        # 道具生成
         if now >= self._next_power_at and not self.castle.is_destroyed():
             self.powerups.add(Power())
             self._next_power_at = now + self.power_cd_ms + random.randint(-1200,1200)
@@ -152,8 +176,9 @@ class Game:
 
         # 敵人更新
         for enemy in self.enemies:
-            enemy.update(self.castle, dt)
-            if getattr(enemy,"type_index",-1) in [2,5,8]:
+            enemy.update(self.castle, dt, self.enemy_bullets)
+            # 小兵遠程射擊 3,6,9 (type_index 2,5,8)
+            if getattr(enemy,"type_index",-1) in [2,5,8] and self.castle:
                 if not hasattr(enemy, "_last_shot_time"):
                     enemy._last_shot_time = 0
                 if now - enemy._last_shot_time >= 1000:
@@ -166,6 +191,14 @@ class Game:
                     bullet = Bullet(muzzle.x, muzzle.y, (dirv.x, dirv.y), speed=4, damage=2)
                     self.enemy_bullets.add(bullet)
                     self.all_sprites.add(bullet)
+
+            # 小兵攻擊城堡爆炸 (快)
+            if enemy.phase=="siege":
+                if not hasattr(enemy,"_last_explode_time"):
+                    enemy._last_explode_time = 0
+                if now - enemy._last_explode_time >= enemy.siege_interval:
+                    self.explosions.add(Explosion(self.castle.rect.center, size=60, duration=400))
+                    enemy._last_explode_time = now
 
         # 更新子彈
         self.bullets.update()
@@ -180,12 +213,15 @@ class Game:
                     enemy.hp -= bullet.damage
                     if enemy.hp <= 0:
                         Player.shared_money += ENEMY_REWARD.get(getattr(enemy,"max_hp",20),10)
+                        # 小兵死亡爆炸 (快)
+                        self.explosions.add(Explosion(enemy.rect.center, size=50, duration=400))
                         enemy.kill()
 
         # 敵人子彈打城堡
         for bullet in list(self.enemy_bullets):
             if bullet.rect.colliderect(self.castle.rect):
                 self.castle.take_damage(bullet.damage)
+                self.explosions.add(Explosion(self.castle.rect.center, size=80, duration=400))
                 bullet.kill()
 
         # 玩家子彈打道具
@@ -196,14 +232,8 @@ class Game:
                 for pu in hits:
                     pu.apply_effect(self.enemies)
 
-        # 勝負判斷
-        if self.castle.is_destroyed():
-            self.state = "lose"
-        elif self.boss_spawned and self.boss not in self.enemies:
-            if self.level < 3:
-                self.state = "win"
-            else:
-                self.state = "win"  # 第三關勝利後將在 draw 中顯示 THE WORLD IS SAVED
+        # 更新爆炸動畫
+        self.explosions.update()
 
     def draw(self):
         if self.state == "menu":
@@ -221,16 +251,16 @@ class Game:
                 self.boss,
                 Player.shared_money,
                 level=self.level,
-                enemy_bullets=self.enemy_bullets,
+                enemy_bullets=self.enemy_bullets
             )
             self.powerups.draw(self.screen)
+            self.explosions.draw(self.screen)
             p1, p2 = self.players.sprites()
             lv1_text = font.render(f"Player 1 lv.{p1.level}", True, WHITE)
             lv2_text = font.render(f"Player 2 lv.{p2.level}", True, WHITE)
             self.screen.blit(lv1_text, (10, 35))
             self.screen.blit(lv2_text, (10, 60))
         elif self.state in ["win", "lose"]:
-            # 第三關勝利顯示特殊訊息
             if self.state=="win" and self.level==3:
                 draw_end_screen(self.screen, win=True, level=3, final_level=3)
             else:

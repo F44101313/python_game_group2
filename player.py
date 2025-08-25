@@ -1,4 +1,4 @@
-import pygame
+import pygame #player.py
 import math
 from bullet import Bullet
 from config import (
@@ -50,6 +50,10 @@ class Player(pygame.sprite.Sprite):
         self._last_upgrade = 0
         self.upgrade_cooldown_ms = 1000  # 1 秒
 
+        self.sfx_buy = pygame.mixer.Sound("sound/sound_effect/buy.ogg")
+        self.sfx_power_volume = 0.02
+        self.sfx_buy.set_volume(self.sfx_power_volume)
+
     def upgrade(self):
         now = pygame.time.get_ticks()
         if now - self._last_upgrade < self.upgrade_cooldown_ms:
@@ -60,6 +64,7 @@ class Player(pygame.sprite.Sprite):
             return
 
         if Player.shared_money >= UPGRADE_COST:
+            self.sfx_buy.play()
             Player.shared_money -= UPGRADE_COST
             self.bullet_speed += UPGRADE_SPEED_INC
             self.bullet_damage += UPGRADE_DAMAGE_INC

@@ -1,40 +1,52 @@
+# view.py
 import pygame
 import json
 import os
 from config import WIDTH, HEIGHT, WHITE, font, title_font, YELLOW, title_font_small
 
-# 背景
-BACKGROUND_IMG = pygame.image.load("Image/background/background0.jpg")
-BACKGROUND_IMG = pygame.transform.scale(BACKGROUND_IMG, (WIDTH, HEIGHT))
+# ================== 背景載入 ==================
+def load_bg(path):
+    img = pygame.image.load(path)  # 不要 convert()，避免 import 時還沒 set_mode
+    return pygame.transform.scale(img, (WIDTH, HEIGHT))
 
-# 城堡圖片（每關可分開設定）
+# 主選單 / 劇情 / 教學背景
+MENU_BG     = load_bg("Image/background/主畫面.png")
+STORY_BG    = load_bg("Image/background/主畫面.png")
+TUTORIAL_BG = load_bg("Image/background/主畫面.png")
+
+# 關卡背景（依 level 使用）
+LEVEL_BGS = [
+    load_bg("Image/background/level1_bg.png"),
+    load_bg("Image/background/level2_bg.png"),
+    load_bg("Image/background/level3_bg.png"),
+]
+
+# ================== 城堡 / Boss / 敵人 ==================
 CASTLE_IMGS = [
-    pygame.image.load("Image/castle/castle1.png"),  # 關卡1
-    pygame.image.load("Image/castle/castle2.png"),  # 關卡2
-    pygame.image.load("Image/castle/castle3.png")   # 關卡3
+    pygame.image.load("Image/castle/熱蘭遮城(荷蘭).png"),
+    pygame.image.load("Image/castle/台南孔廟(明鄭).png"),
+    pygame.image.load("Image/castle/台南州廳(日治).png"),
 ]
 CASTLE_IMGS = [pygame.transform.scale(img, (200, 200)) for img in CASTLE_IMGS]
-CASTLE_POS = (WIDTH // 2 - 100, 0)
+CASTLE_POS = (WIDTH // 2 - 100, 50)
 
-# Boss 圖片
 BOSS_IMGS = [
-    pygame.image.load("Image/boss/boss1.png"),
-    pygame.image.load("Image/boss/boss2.png"),
-    pygame.image.load("Image/boss/boss3.png")
+    pygame.image.load("Image/boss/BOSS(荷蘭).png"),
+    pygame.image.load("Image/boss/BOSS(明鄭).png"),
+    pygame.image.load("Image/boss/BOSS(日治).png"),
 ]
 BOSS_IMGS = [pygame.transform.scale(img, (200, 200)) for img in BOSS_IMGS]
 
-# 敵人圖片
 ENEMY_IMGS = [
-    pygame.image.load(f"Image/enemy/enemy{i}-{j}.png") for i in range(1,4) for j in range(1,4)
+    pygame.image.load(f"Image/enemy/enemys{i}-{j}.png") for i in range(1, 4) for j in range(1, 4)
 ]
-ENEMY_IMGS = [pygame.transform.scale(img, (40, 40)) for img in ENEMY_IMGS]
+ENEMY_IMGS = [pygame.transform.scale(img, (60, 70)) for img in ENEMY_IMGS]
 
-# 中文文字渲染函式
+# ================== 工具 ==================
 def render_chinese_text_surface(text, font, color, spacing=0):
     chars = list(text)
     images = [font.render(ch, True, color) for ch in chars]
-    total_width = sum(img.get_width() for img in images) + spacing * (len(images)-1)
+    total_width = sum(img.get_width() for img in images) + spacing * (len(images) - 1)
     height = max(img.get_height() for img in images)
     surface = pygame.Surface((total_width, height), pygame.SRCALPHA)
     x = 0
@@ -43,46 +55,82 @@ def render_chinese_text_surface(text, font, color, spacing=0):
         x += img.get_width() + spacing
     return surface
 
-# 路徑線
 def draw_path_polyline(screen):
+    import os, json, math, pygame
     if not os.path.exists("path.json"):
         return
-    with open("path.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
-    pts = [pygame.Vector2(p[0], p[1]) for p in data["points"]]
+    try:
+        data = json.load(open("path.json","r",encoding="utf-8"))
+        pts = [pygame.Vector2(float(x), float(y)) for x, y in data.get("points", [])]
+    except Exception:
+        return
     if len(pts) < 2:
         return
-    overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-    pygame.draw.lines(overlay, (255, 255, 255, 120), False, pts, 6)
-    for p in pts:
-        pygame.draw.rect(overlay, (255, 255, 255, 200), (int(p.x)-4, int(p.y)-4, 8, 8))
-    screen.blit(overlay, (0,0))
 
-# 按鈕
-def draw_button(screen, rect, text, font, text_color=WHITE, hover_color=YELLOW, bg_color=(100,100,100)):
+    # 參數（可微調）
+    road_width   = 26
+    border_width = road_width + 6
+    road_color   = (230, 210, 150)  # 不透明畫，最後整層調透明
+    border_color = (205, 185, 130)
+
+    W, H = screen.get_size()
+    overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+
+    def draw_capsule(surf, color, p0, p1, width):
+        """把 p0→p1 畫成圓頭長方形（膠囊）"""
+        v = pygame.Vector2(p1) - pygame.Vector2(p0)
+        L = v.length()
+        if L == 0:  # 單點
+            pygame.draw.circle(surf, color, (int(p0.x), int(p0.y)), width//2)
+            return
+        ang = math.degrees(math.atan2(v.y, v.x))
+        rect = pygame.Surface((L, width), pygame.SRCALPHA)
+        pygame.draw.rect(rect, color, (0, 0, L, width))
+        pygame.draw.circle(rect, color, (0, width//2), width//2)
+        pygame.draw.circle(rect, color, (int(L), width//2), width//2)
+        rect = pygame.transform.rotate(rect, -ang)
+        surf.blit(rect, rect.get_rect(center=((p0.x+p1.x)/2, (p0.y+p1.y)/2)))
+
+    # 外框（比主體寬一點）
+    for a, b in zip(pts[:-1], pts[1:]):
+        draw_capsule(overlay, border_color, a, b, border_width)
+    # 主體
+    for a, b in zip(pts[:-1], pts[1:]):
+        draw_capsule(overlay, road_color, a, b, road_width)
+
+    # 可選：一條淡淡中線
+    try:
+        pygame.draw.aalines(overlay, (240, 230, 180), False, pts, blend=1)
+    except:
+        pass
+
+    # 最後整層統一透明，避免局部疊加變深
+    overlay.set_alpha(200)
+    screen.blit(overlay, (0, 0))
+
+def draw_button(screen, rect, text, font, text_color=WHITE, hover_color=YELLOW, bg_color=(100, 100, 100)):
     mouse_pos = pygame.mouse.get_pos()
     render_color = hover_color if rect.collidepoint(mouse_pos) else text_color
     pygame.draw.rect(screen, bg_color, rect, border_radius=8)
     text_surface = font.render(text, True, render_color)
-    screen.blit(text_surface, (rect.centerx - text_surface.get_width()//2,
-                               rect.centery - text_surface.get_height()//2))
+    screen.blit(text_surface, (rect.centerx - text_surface.get_width() // 2,
+                               rect.centery - text_surface.get_height() // 2))
 
-# 主選單
+# ================== 畫面 ==================
 def draw_menu(screen):
-    screen.blit(BACKGROUND_IMG, (0,0))
+    screen.blit(MENU_BG, (0, 0))
     title = render_chinese_text_surface("《時空城防：台南異象》", title_font, WHITE, spacing=4)
-    screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//2 - 100))
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, HEIGHT // 2 - 100))
 
-    start_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT//2 - 20, 200, 50)
-    howto_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT//2 + 50, 200, 50)
+    start_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 20, 200, 50)
+    howto_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 50, 200, 50)
     draw_button(screen, start_rect, "START", font)
-    draw_button(screen, howto_rect, "how to play", font)
+    draw_button(screen, howto_rect, "How to Play", font)
 
     return {"start": start_rect, "howto": howto_rect}
 
-# 勝利/失敗畫面
 def draw_end_screen(screen, win=True, level=1, final_level=3):
-    screen.blit(BACKGROUND_IMG, (0,0))
+    screen.blit(MENU_BG, (0, 0))
     if win:
         if level < final_level:
             msg = "VICTORY!"
@@ -96,14 +144,11 @@ def draw_end_screen(screen, win=True, level=1, final_level=3):
 
     text = font.render(msg, True, WHITE)
     prompt_text = font.render(prompt, True, WHITE)
-    screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - 50))
-    screen.blit(prompt_text, (WIDTH//2 - prompt_text.get_width()//2, HEIGHT//2 + 10))
+    screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - 50))
+    screen.blit(prompt_text, (WIDTH // 2 - prompt_text.get_width() // 2, HEIGHT // 2 + 10))
 
-# 劇情
-def draw_story(screen):
-    screen.blit(BACKGROUND_IMG, (0,0))
-    story_text0 = title_font_small.render("STORY", True, WHITE)
-    screen.blit(story_text0, (WIDTH//2 - story_text0.get_width()//2, HEIGHT//4 - 90))
+def draw_story(screen, top=160, side_margin=72, line_spacing=46, letter_spacing=2, align="center", nudge_x=0):
+    screen.blit(STORY_BG, (0, 0))
 
     lines = [
         "在不久的未來，台南古城因為神秘的能量波動",
@@ -113,49 +158,73 @@ def draw_story(screen):
         "玩家將化身為守護者，肩負起保衛古城的使命，",
         "利用手中的力量抵禦一波波入侵。",
         "隨著戰鬥推進，玩家不僅要擊退敵人，還能逐步解鎖",
-        "不同時代的故事片段，體驗守護台南歷史文化的榮耀與挑戰。"
+        "不同時代的故事片段，體驗守護台南歷史文化的榮耀與挑戰。",
     ]
-    start_y = HEIGHT//4 - 30
-    line_spacing = 30
-    for i, line in enumerate(lines):
-        text_surface = render_chinese_text_surface(line, font, WHITE, spacing=4)
-        screen.blit(text_surface, (WIDTH//2 - text_surface.get_width()//2, start_y + i*line_spacing))
 
-    go_rect = pygame.Rect(WIDTH//2 - 60, start_y + len(lines)*line_spacing + 20, 120, 40)
+    # 做出每行 surface，好計寬高
+    surfaces = [render_chinese_text_surface(line, font, WHITE, spacing=letter_spacing) for line in lines]
+    text_w  = max(s.get_width() for s in surfaces)
+    text_h  = sum(s.get_height() for s in surfaces) + (len(surfaces)-1) * (line_spacing - surfaces[0].get_height())
+
+    # 文字區塊左上角：置中 or 靠左；可用 nudge_x 微調左右偏移
+    x0 = (WIDTH - text_w)//2 if align == "center" else side_margin
+    x0 += nudge_x
+    y0 = top
+
+    # 半透明底盒（讓字更清楚）
+    pad = 10
+    box = pygame.Surface((text_w + pad*2, text_h + pad*2), pygame.SRCALPHA)
+    pygame.draw.rect(box, (0, 0, 0, 90), box.get_rect(), border_radius=10)
+    screen.blit(box, (x0 - pad, y0 - pad))
+
+    # 標題也置中（相對整個畫面居中，再加同樣 nudge_x）
+    title = title_font_small.render("STORY", True, WHITE)
+    screen.blit(title, (WIDTH//2 - title.get_width()//2 + nudge_x, y0 - 62))
+
+    # 每行都置中到同一塊（寬度 text_w），自然是一行一行的置中
+    y = y0
+    for s in surfaces:
+        x = x0 + (text_w - s.get_width())//2 if align == "center" else x0
+        screen.blit(s, (x, y))
+        y += line_spacing
+
+    # GO 按鈕放在文字塊正下方，也跟著 nudge_x
+    go_rect = pygame.Rect(WIDTH//2 - 60 + nudge_x, y + 20, 120, 40)
     draw_button(screen, go_rect, "GO!!!", font)
     return {"go": go_rect}
 
-# 教學
 def draw_tutorial(screen):
-    screen.blit(BACKGROUND_IMG, (0, 0))
-    start_y = HEIGHT//4
+    screen.blit(TUTORIAL_BG, (0, 0))
+    start_y = HEIGHT // 4
     line_spacing = 30
     side_margin = 40
     lines = [
         "P1：",
-        "UP、DOWN：調整守護塔射擊方向",
-        "M：升級武器(可以造成更高傷害及提升速度)",
+        "LEFT、RIGHT：調整守護塔射擊方向",
+        "M：升級武器(更高傷害 + 更快速度)",
         " ",
         "P2：",
-        "W、S：調整守護塔射擊方向",
-        "E：升級武器(可以造成更高傷害及提升速度)"
+        "A、D：調整守護塔射擊方向",
+        "E：升級武器(更高傷害 + 更快速度)",
     ]
     for i, line in enumerate(lines):
         text_surface = render_chinese_text_surface(line, font, WHITE, spacing=4)
-        screen.blit(text_surface, (side_margin, start_y + i*line_spacing))
+        screen.blit(text_surface, (side_margin, start_y + i * line_spacing))
 
-    ok_rect = pygame.Rect(WIDTH//2 - 60, HEIGHT//2 + 50, 120, 40)
+    ok_rect = pygame.Rect(WIDTH // 2 - 60, HEIGHT // 2 + 50, 120, 40)
     draw_button(screen, ok_rect, "OK", font)
-    return {"ok": ok_rect}    
+    return {"ok": ok_rect}
 
-# 遊戲主畫面
-def draw_game_screen(screen, all_sprites, enemies, castle, boss, money, show_path=True, level=1, enemy_bullets=None):
-    screen.blit(BACKGROUND_IMG, (0,0))
+def draw_game_screen(screen, all_sprites, enemies, castle, boss, money,
+                     show_path=True, level=1, enemy_bullets=None):
+    # 依關卡套背景
+    bg = LEVEL_BGS[min(level - 1, len(LEVEL_BGS) - 1)]
+    screen.blit(bg, (0, 0))
     if show_path:
         draw_path_polyline(screen)
 
     # 城堡
-    castle_img = CASTLE_IMGS[level-1] if level-1 < len(CASTLE_IMGS) else CASTLE_IMGS[0]
+    castle_img = CASTLE_IMGS[level - 1] if level - 1 < len(CASTLE_IMGS) else CASTLE_IMGS[0]
     screen.blit(castle_img, CASTLE_POS)
     castle.rect.topleft = CASTLE_POS
     castle.draw(screen, font)
@@ -170,7 +239,7 @@ def draw_game_screen(screen, all_sprites, enemies, castle, boss, money, show_pat
 
     # Boss
     if boss and boss.alive():
-        boss_img = BOSS_IMGS[level-1]
+        boss_img = BOSS_IMGS[min(level - 1, len(BOSS_IMGS) - 1)]
         boss_rect = boss_img.get_rect(center=boss.rect.center)
         screen.blit(boss_img, boss_rect)
         if hasattr(boss, "draw_hp"):
@@ -186,14 +255,14 @@ def draw_game_screen(screen, all_sprites, enemies, castle, boss, money, show_pat
     if enemy_bullets:
         for b in enemy_bullets:
             pygame.draw.rect(screen, (255, 0, 0), b.rect)
-            pygame.draw.line(screen, (255, 100, 100),
-                             (b.rect.centerx, b.rect.centery),
-                             (b.rect.centerx - b.speedx*2, b.rect.centery - b.speedy*2), 2)
+            pygame.draw.line(
+                screen, (255, 100, 100),
+                (b.rect.centerx, b.rect.centery),
+                (b.rect.centerx - b.speedx * 2, b.rect.centery - b.speedy * 2), 2
+            )
 
-    # 金錢
+    # 金錢 / 關卡
     money_text = font.render(f"Money: {money}", True, WHITE)
-    screen.blit(money_text, (10,10))
-
-    # 關卡
+    screen.blit(money_text, (10, 10))
     level_text = font.render(f"Level {level}", True, WHITE)
-    screen.blit(level_text, (10, HEIGHT-30))
+    screen.blit(level_text, (10, HEIGHT - 30))

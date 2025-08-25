@@ -25,6 +25,7 @@ ENEMY_STATS = {
 class Game:
     def __init__(self):
         pygame.init()
+        pygame.mixer.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("《時空城防：台南異象》")
         self.clock = pygame.time.Clock()
@@ -37,9 +38,26 @@ class Game:
         self._upgrade_cd_ms = 1000
         self._next_upgrade_p1 = 0
         self._next_upgrade_p2 = 0
-        # 延遲結束控制
         self.end_time = None
         self.next_state = None
+
+        # 背景音樂
+        self.bgm_menu = "sound/bgm/menu.ogg"
+        self.bgm_level = {1:"sound/bgm/level1.ogg", 2:"sound/bgm/level2.ogg", 3:"sound/bgm/level3.ogg"}
+        self.bgm_win = "sound/bgm/win.ogg"
+        self.bgm_lose = "sound/bgm/lose.ogg"
+        self.bgm_end = "sound/bgm/END.ogg"
+        self.current_bgm = None
+
+        # 音效
+        self.sfx_explode_small = pygame.mixer.Sound("sound/sound_effect/explode1.ogg")
+        self.sfx_explode_big   = pygame.mixer.Sound("sound/sound_effect/explode2.mp3")
+
+    def play_bgm(self, path, loop=-1):
+        if self.current_bgm != path:
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.play(loop)
+            self.current_bgm = path
 
     def new_game(self, restart_level=False):
         if not restart_level:
@@ -53,18 +71,15 @@ class Game:
         self.enemy_bullets = pygame.sprite.Group()
         self.explosions = pygame.sprite.Group()
 
-        # 玩家設定
         player1 = Player(WIDTH-100, HEIGHT-200, (pygame.K_DOWN, pygame.K_UP), 180, 135, 225)
         player2 = Player(100, 300, (pygame.K_w, pygame.K_s), 0, -45, 45)
         self.players.add(player1, player2)
         self.all_sprites.add(player1, player2)
-        Player.shared_money = 0  # 每關開始重置金錢
+        Player.shared_money = 0
 
-        # 城堡
         castle_hp_map = {1: 700, 2: 1000, 3: 1000}
         self.castle = Castle(level=self.level, hp=castle_hp_map.get(self.level, 500))
 
-        # Boss
         self.boss_spawned = False
         self.boss = None
         self.start_ticks = pygame.time.get_ticks()
@@ -120,22 +135,24 @@ class Game:
             return
         now = pygame.time.get_ticks()
 
-        # --- Castle 死亡處理 ---
+        # Castle 死亡
         if self.castle.is_destroyed() and self.end_time is None:
             self.explosions.add(Explosion(self.castle.rect.center, size=120, duration=1000))
+            self.sfx_explode_big.play()
             self.end_time = now
             self.next_state = "lose"
 
-        # --- Boss 死亡處理 ---
+        # Boss 死亡
         if self.boss_spawned and self.boss not in self.enemies and self.end_time is None:
             self.explosions.add(Explosion(self.boss.rect.center, size=150, duration=1000))
+            self.sfx_explode_big.play()
             self.end_time = now
             self.next_state = "win"
 
-        # --- 延遲 3.5 秒後才切換 ---
+        # 延遲切換
         if self.end_time and now - self.end_time >= 2000:
             self.state = self.next_state
-            return  # 不再更新遊戲
+            return
 
         # 生成敵人
         if not self.boss_spawned and random.random() < 0.01:
@@ -155,7 +172,7 @@ class Game:
             self.all_sprites.add(self.boss)
             self.boss_spawned = True
 
-        # 道具生成
+        # 道具
         if now >= self._next_power_at and not self.castle.is_destroyed():
             self.powerups.add(Power())
             self._next_power_at = now + self.power_cd_ms + random.randint(-1200,1200)
@@ -177,7 +194,8 @@ class Game:
         # 敵人更新
         for enemy in self.enemies:
             enemy.update(self.castle, dt, self.enemy_bullets)
-            # 小兵遠程射擊 3,6,9 (type_index 2,5,8)
+
+            # 遠程射擊小兵 3,6,9
             if getattr(enemy,"type_index",-1) in [2,5,8] and self.castle:
                 if not hasattr(enemy, "_last_shot_time"):
                     enemy._last_shot_time = 0
@@ -192,19 +210,20 @@ class Game:
                     self.enemy_bullets.add(bullet)
                     self.all_sprites.add(bullet)
 
-            # 小兵攻擊城堡爆炸 (快)
+            # 小兵攻擊城堡爆炸
             if enemy.phase=="siege":
                 if not hasattr(enemy,"_last_explode_time"):
                     enemy._last_explode_time = 0
                 if now - enemy._last_explode_time >= enemy.siege_interval:
                     self.explosions.add(Explosion(self.castle.rect.center, size=60, duration=400))
+                    self.sfx_explode_small.play()
                     enemy._last_explode_time = now
 
-        # 更新子彈
+        # 子彈更新
         self.bullets.update()
         self.enemy_bullets.update()
 
-        # 玩家子彈打到敵人
+        # 玩家打敵人
         for bullet in list(self.bullets):
             hit_list = pygame.sprite.spritecollide(bullet, self.enemies, False)
             if hit_list:
@@ -213,8 +232,8 @@ class Game:
                     enemy.hp -= bullet.damage
                     if enemy.hp <= 0:
                         Player.shared_money += ENEMY_REWARD.get(getattr(enemy,"max_hp",20),10)
-                        # 小兵死亡爆炸 (快)
                         self.explosions.add(Explosion(enemy.rect.center, size=50, duration=400))
+                        self.sfx_explode_small.play()
                         enemy.kill()
 
         # 敵人子彈打城堡
@@ -222,9 +241,10 @@ class Game:
             if bullet.rect.colliderect(self.castle.rect):
                 self.castle.take_damage(bullet.damage)
                 self.explosions.add(Explosion(self.castle.rect.center, size=80, duration=400))
+                self.sfx_explode_small.play()
                 bullet.kill()
 
-        # 玩家子彈打道具
+        # 玩家打道具
         for bullet in list(self.bullets):
             hits = pygame.sprite.spritecollide(bullet, self.powerups, dokill=True)
             if hits:
@@ -232,17 +252,20 @@ class Game:
                 for pu in hits:
                     pu.apply_effect(self.enemies)
 
-        # 更新爆炸動畫
         self.explosions.update()
 
     def draw(self):
-        if self.state == "menu":
-            draw_menu(self.screen)
-        elif self.state == "story":
-            draw_story(self.screen)
-        elif self.state == "tutoriel":
-            draw_tutorial(self.screen)
+        if self.state == "menu" or self.state in ["story", "tutoriel"]:
+            self.play_bgm(self.bgm_menu)
+            if self.state == "menu":
+                draw_menu(self.screen)
+            elif self.state == "story":
+                draw_story(self.screen)
+            elif self.state == "tutoriel":
+                draw_tutorial(self.screen)
+
         elif self.state == "playing":
+            self.play_bgm(self.bgm_level[self.level])
             draw_game_screen(
                 self.screen,
                 self.all_sprites,
@@ -260,9 +283,13 @@ class Game:
             lv2_text = font.render(f"Player 2 lv.{p2.level}", True, WHITE)
             self.screen.blit(lv1_text, (10, 35))
             self.screen.blit(lv2_text, (10, 60))
+
         elif self.state in ["win", "lose"]:
             if self.state=="win" and self.level==3:
+                self.play_bgm(self.bgm_end)
                 draw_end_screen(self.screen, win=True, level=3, final_level=3)
             else:
+                self.play_bgm(self.bgm_win if self.state=="win" else self.bgm_lose)
                 draw_end_screen(self.screen, win=(self.state=="win"), level=self.level)
+
         pygame.display.flip()
